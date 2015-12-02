@@ -7,8 +7,22 @@ import com.google.api.server.spi.response.BadRequestException;
 import com.google.api.server.spi.response.CollectionResponse;
 import com.google.api.server.spi.response.NotFoundException;
 import com.google.appengine.api.datastore.Cursor;
+import com.google.appengine.api.datastore.GeoPt;
 import com.google.appengine.api.datastore.QueryResultIterator;
 import com.google.appengine.api.oauth.OAuthRequestException;
+import com.google.appengine.api.search.Document;
+import com.google.appengine.api.search.Facet;
+import com.google.appengine.api.search.Field;
+import com.google.appengine.api.search.GeoPoint;
+import com.google.appengine.api.search.Index;
+import com.google.appengine.api.search.IndexSpec;
+import com.google.appengine.api.search.PutException;
+import com.google.appengine.api.search.QueryOptions;
+import com.google.appengine.api.search.Results;
+import com.google.appengine.api.search.ScoredDocument;
+import com.google.appengine.api.search.SearchServiceFactory;
+import com.google.appengine.api.search.SortExpression;
+import com.google.appengine.api.search.SortOptions;
 import com.google.appengine.api.users.User;
 import com.googlecode.objectify.ObjectifyService;
 import com.googlecode.objectify.cmd.Query;
@@ -17,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.inject.Named;
 
@@ -44,6 +59,8 @@ public class LostReportEndpoint {
             .class.getName());
 
     private static final int DEFAULT_LIST_LIMIT = 20;
+
+    private static final String DOC_INDEX = "lostReport";
 
     static {
         // Typically you would register this inside an OfyServive wrapper.
@@ -92,11 +109,41 @@ public class LostReportEndpoint {
         if (lostReport.getId() != null) {
             throw new BadRequestException("Invalid report object.");
         }
-        logger.info("For user: " + user.getEmail());
+        logger.info("For user: " + user.getEmail() + " " + user.getUserId());
         lostReport.setUserId(user.getUserId());
         lostReport.setUserNickname(user.getNickname());
+
         ofy().save().entity(lostReport).now();
         logger.info("Created LostReport.");
+
+        Document.Builder docBuilder = Document.newBuilder().setId(lostReport
+                .getId() + "");
+        docBuilder.addField(Field.newBuilder().setName("title").setText
+                (lostReport.getTitle()));
+        docBuilder.addField(Field.newBuilder().setName("description").setText
+                (lostReport.getDescription()));
+        docBuilder.addField(Field.newBuilder().setName("timeLost").setDate
+                (lostReport.getTimeLost()));
+        docBuilder.addField(Field.newBuilder().setName("created").setDate
+                (lostReport.getCreated()));
+        docBuilder.addFacet(Facet.withAtom("found", "false"));
+        for (GeoPt location : lostReport.getLocations()) {
+            docBuilder.addField(Field.newBuilder().setName("location")
+                    .setGeoPoint(new GeoPoint(location.getLatitude(),
+                            location.getLongitude())));
+        }
+
+        Document doc = docBuilder.build();
+        IndexSpec indexSpec = IndexSpec.newBuilder().setName(DOC_INDEX)
+                .build();
+        Index index = SearchServiceFactory.getSearchService().getIndex
+                (indexSpec);
+        try {
+            index.put(doc);
+        } catch (PutException e) {
+            // TODO should retry
+            logger.throwing(this.getClass().toString(), "insert", e);
+        }
         return ofy().load().entity(lostReport).now();
     }
 
@@ -183,6 +230,92 @@ public class LostReportEndpoint {
         return CollectionResponse.<LostReport>builder().setItems
                 (lostReportList).setNextPageToken(queryIterator.getCursor()
                 .toWebSafeString()).build();
+    }
+
+    @ApiMethod(
+            name = "lostReport.myReports.list",
+            path = "lostReport/myReports",
+            httpMethod = ApiMethod.HttpMethod.GET)
+    public CollectionResponse<LostReport> listUserReports(@Nullable @Named
+            ("cursor") String cursor, @Nullable @Named("limit") Integer
+                                                                  limit,
+                                                          User user) throws
+            OAuthRequestException {
+        if (user == null) {
+            logger.exiting(LostReportEndpoint.class.toString(), "Not logged " +
+                    "in.");
+            throw new OAuthRequestException("You need to login to list your " +
+                    "reports.");
+        }
+        logger.info("For user: " + user.getEmail());
+
+        limit = limit == null ? DEFAULT_LIST_LIMIT : limit;
+        Query<LostReport> query = ofy().load().type(LostReport.class).filter
+                ("userId", user
+                        .getUserId
+                                ()).order("-created").limit(limit);
+
+        if (cursor != null) {
+            query = query.startAt(Cursor.fromWebSafeString(cursor));
+        }
+        QueryResultIterator<LostReport> queryIterator = query.iterator();
+        List<LostReport> lostReportList = new ArrayList<LostReport>(limit);
+        while (queryIterator.hasNext()) {
+            lostReportList.add(queryIterator.next());
+        }
+        return CollectionResponse.<LostReport>builder().setItems
+                (lostReportList).setNextPageToken(queryIterator.getCursor()
+                .toWebSafeString()).build();
+    }
+
+    @ApiMethod(
+            name = "lostReport.search",
+            path = "lostReport/search",
+            httpMethod = ApiMethod.HttpMethod.GET)
+    public CollectionResponse<LostReport> search(@Nonnull @Named("q") String
+                                                         queryString, @Nullable
+                                                 @Named("cursor") String
+                                                         cursor, @Nullable
+                                                 @Named("limit") Integer
+                                                         limit) {
+        // TODO may be use cursor and limit
+        SortOptions sortOptions = SortOptions.newBuilder()
+                .addSortExpression(SortExpression.newBuilder().setExpression
+                        ("_rank"))
+                .addSortExpression(SortExpression.newBuilder()
+                        .setExpression("created")
+                        .setDirection(SortExpression.SortDirection.DESCENDING))
+                .setLimit(DEFAULT_LIST_LIMIT)
+                .build();
+
+        QueryOptions queryOptions = QueryOptions.newBuilder()
+                .setLimit(DEFAULT_LIST_LIMIT)
+                .setReturningIdsOnly(true)
+                .setSortOptions(sortOptions)
+                .build();
+
+        com.google.appengine.api.search.Query query = com.google.appengine
+                .api.search.Query.newBuilder()
+                .setOptions(queryOptions).build(queryString);
+
+        IndexSpec indexSpec = IndexSpec.newBuilder().setName(DOC_INDEX)
+                .build();
+        Index index = SearchServiceFactory.getSearchService().getIndex
+                (indexSpec);
+
+        Results<ScoredDocument> results = index.search(query);
+
+        List<LostReport> lostReportList = new ArrayList<>(results
+                .getNumberReturned());
+
+        for (ScoredDocument match : results.getResults()) {
+            lostReportList.add(ofy().load().type(LostReport
+                    .class).id(Long.parseLong(match.getId())).now());
+        }
+
+        return CollectionResponse.<LostReport>builder().setItems
+                (lostReportList).build();
+
     }
 
     private void checkOwns(Long id, User user) throws NotFoundException,

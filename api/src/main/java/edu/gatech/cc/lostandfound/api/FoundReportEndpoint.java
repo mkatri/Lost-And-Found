@@ -9,6 +9,19 @@ import com.google.api.server.spi.response.NotFoundException;
 import com.google.appengine.api.datastore.Cursor;
 import com.google.appengine.api.datastore.QueryResultIterator;
 import com.google.appengine.api.oauth.OAuthRequestException;
+import com.google.appengine.api.search.Document;
+import com.google.appengine.api.search.Facet;
+import com.google.appengine.api.search.Field;
+import com.google.appengine.api.search.GeoPoint;
+import com.google.appengine.api.search.Index;
+import com.google.appengine.api.search.IndexSpec;
+import com.google.appengine.api.search.PutException;
+import com.google.appengine.api.search.QueryOptions;
+import com.google.appengine.api.search.Results;
+import com.google.appengine.api.search.ScoredDocument;
+import com.google.appengine.api.search.SearchServiceFactory;
+import com.google.appengine.api.search.SortExpression;
+import com.google.appengine.api.search.SortOptions;
 import com.google.appengine.api.users.User;
 import com.googlecode.objectify.ObjectifyService;
 import com.googlecode.objectify.cmd.Query;
@@ -17,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.inject.Named;
 
@@ -54,6 +68,7 @@ public class FoundReportEndpoint {
             .class.getName());
 
     private static final int DEFAULT_LIST_LIMIT = 20;
+    private static final String DOC_INDEX = "foundReport";
 
     static {
         // Typically you would register this inside an OfyServive wrapper.
@@ -94,7 +109,7 @@ public class FoundReportEndpoint {
     public FoundReport insert(FoundReport foundReport, User user) throws
             OAuthRequestException, BadRequestException {
         if (user == null) {
-            logger.exiting(LostReportEndpoint.class.toString(), "Not logged " +
+            logger.exiting(FoundReportEndpoint.class.toString(), "Not logged " +
                     "in.");
             throw new OAuthRequestException("You need to login to file " +
                     "reports.");
@@ -105,8 +120,38 @@ public class FoundReportEndpoint {
         logger.info("For user: " + user.getEmail());
         foundReport.setUserId(user.getUserId());
         foundReport.setUserNickname(user.getNickname());
+
         ofy().save().entity(foundReport).now();
         logger.info("Created FoundReport with ID: " + foundReport.getId());
+
+
+        Document.Builder docBuilder = Document.newBuilder().setId(foundReport
+                .getId() + "");
+        docBuilder.addField(Field.newBuilder().setName("title").setText
+                (foundReport.getTitle()));
+        docBuilder.addField(Field.newBuilder().setName("description").setText
+                (foundReport.getDescription()));
+        docBuilder.addField(Field.newBuilder().setName("timeFound").setDate
+                (foundReport.getTimeFound()));
+        docBuilder.addField(Field.newBuilder().setName("created").setDate
+                (foundReport.getCreated()));
+        docBuilder.addFacet(Facet.withAtom("returned", "false"));
+        docBuilder.addField(Field.newBuilder().setName("location")
+                .setGeoPoint(new GeoPoint(foundReport.getLocation()
+                        .getLatitude(), foundReport.getLocation()
+                        .getLongitude())));
+
+        Document doc = docBuilder.build();
+        IndexSpec indexSpec = IndexSpec.newBuilder().setName(DOC_INDEX)
+                .build();
+        Index index = SearchServiceFactory.getSearchService().getIndex
+                (indexSpec);
+        try {
+            index.put(doc);
+        } catch (PutException e) {
+            // TODO should retry
+            logger.throwing(this.getClass().toString(), "insert", e);
+        }
 
         return ofy().load().entity(foundReport).now();
     }
@@ -183,6 +228,92 @@ public class FoundReportEndpoint {
         return CollectionResponse.<FoundReport>builder().setItems
                 (foundReportList).setNextPageToken(queryIterator.getCursor()
                 .toWebSafeString()).build();
+    }
+
+    @ApiMethod(
+            name = "foundReport.myReports.list",
+            path = "foundReport/myReports",
+            httpMethod = ApiMethod.HttpMethod.GET)
+    public CollectionResponse<FoundReport> listUserReports(@Nullable @Named
+            ("cursor") String cursor, @Nullable @Named("limit") Integer
+                                                                   limit,
+                                                           User user) throws
+            OAuthRequestException {
+        if (user == null) {
+            logger.exiting(FoundReportEndpoint.class.toString(), "Not logged " +
+                    "in.");
+            throw new OAuthRequestException("You need to login to list your " +
+                    "reports.");
+        }
+        logger.info("For user: " + user.getEmail());
+
+        limit = limit == null ? DEFAULT_LIST_LIMIT : limit;
+        Query<FoundReport> query = ofy().load().type(FoundReport.class).filter
+                ("userId", user
+                        .getUserId
+                                ()).order("-created").limit(limit);
+
+        if (cursor != null) {
+            query = query.startAt(Cursor.fromWebSafeString(cursor));
+        }
+        QueryResultIterator<FoundReport> queryIterator = query.iterator();
+        List<FoundReport> foundReportList = new ArrayList<FoundReport>(limit);
+        while (queryIterator.hasNext()) {
+            foundReportList.add(queryIterator.next());
+        }
+        return CollectionResponse.<FoundReport>builder().setItems
+                (foundReportList).setNextPageToken(queryIterator.getCursor()
+                .toWebSafeString()).build();
+    }
+
+    @ApiMethod(
+            name = "foundReport.search",
+            path = "foundReport/search",
+            httpMethod = ApiMethod.HttpMethod.GET)
+    public CollectionResponse<FoundReport> search(@Nonnull @Named("q") String
+                                                          queryString, @Nullable
+                                                  @Named("cursor") String
+                                                          cursor, @Nullable
+                                                  @Named("limit") Integer
+                                                          limit) {
+        // TODO may be use cursor and limit
+        SortOptions sortOptions = SortOptions.newBuilder()
+                .addSortExpression(SortExpression.newBuilder().setExpression
+                        ("_rank"))
+                .addSortExpression(SortExpression.newBuilder()
+                        .setExpression("created")
+                        .setDirection(SortExpression.SortDirection.DESCENDING))
+                .setLimit(DEFAULT_LIST_LIMIT)
+                .build();
+
+        QueryOptions queryOptions = QueryOptions.newBuilder()
+                .setLimit(DEFAULT_LIST_LIMIT)
+                .setReturningIdsOnly(true)
+                .setSortOptions(sortOptions)
+                .build();
+
+        com.google.appengine.api.search.Query query = com.google.appengine
+                .api.search.Query.newBuilder()
+                .setOptions(queryOptions).build(queryString);
+
+        IndexSpec indexSpec = IndexSpec.newBuilder().setName(DOC_INDEX)
+                .build();
+        Index index = SearchServiceFactory.getSearchService().getIndex
+                (indexSpec);
+
+        Results<ScoredDocument> results = index.search(query);
+
+        List<FoundReport> foundReportList = new ArrayList<>(results
+                .getNumberReturned());
+
+        for (ScoredDocument match : results.getResults()) {
+            foundReportList.add(ofy().load().type(FoundReport
+                    .class).id(Long.parseLong(match.getId())).now());
+        }
+
+        return CollectionResponse.<FoundReport>builder().setItems
+                (foundReportList).build();
+
     }
 
     private void checkExists(Long id) throws NotFoundException {

@@ -13,6 +13,7 @@ import java.util.Date;
 @Entity
 public abstract class Report {
 
+    //TODO consider changing id type to string
     @Id
     Long id;
     String title;
