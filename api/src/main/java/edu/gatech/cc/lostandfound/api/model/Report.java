@@ -1,12 +1,10 @@
 package edu.gatech.cc.lostandfound.api.model;
 
-import com.google.appengine.api.datastore.Blob;
-import com.google.appengine.repackaged.com.google.type.LatLng;
 import com.googlecode.objectify.annotation.Entity;
 import com.googlecode.objectify.annotation.Id;
+import com.googlecode.objectify.annotation.Index;
 
 import java.util.Date;
-import java.util.List;
 
 /**
  * Created by mkatri on 11/22/15.
@@ -15,10 +13,13 @@ import java.util.List;
 @Entity
 public abstract class Report {
 
-    @Id Long id;
+    @Id
+    Long id;
     String title;
     String description;
+    @Index
     Date created;
+    @Index
     String userId;
     String userNickname;
 
@@ -50,12 +51,12 @@ public abstract class Report {
         return created;
     }
 
-    public void setUserId(String userId) {
-        this.userId = userId;
-    }
-
     public String getUserId() {
         return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
     public String getUserNickname() {

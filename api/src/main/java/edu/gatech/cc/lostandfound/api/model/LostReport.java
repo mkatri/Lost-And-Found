@@ -3,6 +3,7 @@ package edu.gatech.cc.lostandfound.api.model;
 
 import com.google.appengine.api.datastore.GeoPt;
 import com.googlecode.objectify.annotation.Entity;
+import com.googlecode.objectify.annotation.Index;
 
 import java.util.Date;
 import java.util.List;
@@ -13,29 +14,22 @@ import java.util.List;
 
 @Entity
 public class LostReport extends Report {
-    Date timeWindowBegin;
-    Date timeWindowEnd;
-    String reporter;
+    Date timeLost;
     List<GeoPt> locations;
+    @Index
+    boolean found;
 
     public LostReport() {
         super();
+        found = false;
     }
 
-    public Date getTimeWindowBegin() {
-        return timeWindowBegin;
+    public Date getTimeLost() {
+        return timeLost;
     }
 
-    public void setTimeWindowBegin(Date timeWindowBegin) {
-        this.timeWindowBegin = timeWindowBegin;
-    }
-
-    public Date getTimeWindowEnd() {
-        return timeWindowEnd;
-    }
-
-    public void setTimeWindowEnd(Date timeWindowEnd) {
-        this.timeWindowEnd = timeWindowEnd;
+    public void setTimeLost(Date timeLost) {
+        this.timeLost = timeLost;
     }
 
     public List<GeoPt> getLocations() {
@@ -44,5 +38,13 @@ public class LostReport extends Report {
 
     public void setLocations(List<GeoPt> locations) {
         this.locations = locations;
+    }
+
+    public boolean getFound() {
+        return found;
+    }
+
+    public void setFound(boolean found) {
+        this.found = found;
     }
 }

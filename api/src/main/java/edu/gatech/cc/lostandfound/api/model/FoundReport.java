@@ -3,6 +3,7 @@ package edu.gatech.cc.lostandfound.api.model;
 import com.google.appengine.api.datastore.Blob;
 import com.google.appengine.api.datastore.GeoPt;
 import com.googlecode.objectify.annotation.Entity;
+import com.googlecode.objectify.annotation.Index;
 
 import java.util.Date;
 
@@ -11,12 +12,16 @@ import java.util.Date;
  */
 @Entity
 public class FoundReport extends Report {
-    Date time;
+    @Index
+    Date timeFound;
     Blob image;
     GeoPt location;
+    @Index
+    boolean returned;
 
     public FoundReport() {
         super();
+        returned = false;
     }
 
     public Blob getImage() {
@@ -35,11 +40,19 @@ public class FoundReport extends Report {
         this.location = location;
     }
 
-    public Date getTime() {
-        return time;
+    public Date getTimeFound() {
+        return timeFound;
     }
 
-    public void setTime(Date time) {
-        this.time = time;
+    public void setTimeFound(Date timeFound) {
+        this.timeFound = timeFound;
+    }
+
+    public boolean getReturned(){
+        return returned;
+    }
+
+    public void setReturned(boolean returned) {
+        this.returned = returned;
     }
 }
