@@ -14,6 +14,7 @@ import java.util.List;
 
 @Entity
 public class LostReport extends Report {
+    @Index
     Date timeLost;
     List<GeoPt> locations;
     @Index

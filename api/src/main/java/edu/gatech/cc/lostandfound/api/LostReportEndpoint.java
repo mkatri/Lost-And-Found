@@ -16,6 +16,7 @@ import com.google.appengine.api.search.Field;
 import com.google.appengine.api.search.GeoPoint;
 import com.google.appengine.api.search.Index;
 import com.google.appengine.api.search.IndexSpec;
+import com.google.appengine.api.search.MatchScorer;
 import com.google.appengine.api.search.PutException;
 import com.google.appengine.api.search.QueryOptions;
 import com.google.appengine.api.search.Results;
@@ -24,6 +25,7 @@ import com.google.appengine.api.search.SearchServiceFactory;
 import com.google.appengine.api.search.SortExpression;
 import com.google.appengine.api.search.SortOptions;
 import com.google.appengine.api.users.User;
+import com.google.appengine.repackaged.com.google.common.base.Joiner;
 import com.googlecode.objectify.ObjectifyService;
 import com.googlecode.objectify.cmd.Query;
 
@@ -55,12 +57,10 @@ import static com.googlecode.objectify.ObjectifyService.ofy;
 )
 public class LostReportEndpoint {
 
+    protected static final String DOC_INDEX = "lostReport";
     private static final Logger logger = Logger.getLogger(LostReportEndpoint
             .class.getName());
-
     private static final int DEFAULT_LIST_LIMIT = 20;
-
-    private static final String DOC_INDEX = "lostReport";
 
     static {
         // Typically you would register this inside an OfyServive wrapper.
@@ -280,6 +280,9 @@ public class LostReportEndpoint {
                                                          limit) {
         // TODO may be use cursor and limit
         SortOptions sortOptions = SortOptions.newBuilder()
+                .setMatchScorer(MatchScorer.newBuilder().build())
+                .addSortExpression(SortExpression.newBuilder().setExpression
+                        ("_score"))
                 .addSortExpression(SortExpression.newBuilder().setExpression
                         ("_rank"))
                 .addSortExpression(SortExpression.newBuilder()
@@ -296,7 +299,9 @@ public class LostReportEndpoint {
 
         com.google.appengine.api.search.Query query = com.google.appengine
                 .api.search.Query.newBuilder()
-                .setOptions(queryOptions).build(queryString);
+                .setOptions(queryOptions).build(Joiner.on(" OR ").join(
+                        queryString.trim().split
+                                ("\\s+")));
 
         IndexSpec indexSpec = IndexSpec.newBuilder().setName(DOC_INDEX)
                 .build();
@@ -309,8 +314,10 @@ public class LostReportEndpoint {
                 .getNumberReturned());
 
         for (ScoredDocument match : results.getResults()) {
-            lostReportList.add(ofy().load().type(LostReport
-                    .class).id(Long.parseLong(match.getId())).now());
+            LostReport lostReport = ofy().load().type(LostReport
+                    .class).id(Long.parseLong(match.getId())).now();
+            if (lostReport != null)
+                lostReportList.add(lostReport);
         }
 
         return CollectionResponse.<LostReport>builder().setItems
@@ -323,7 +330,7 @@ public class LostReportEndpoint {
         try {
             LostReport report = ofy().load().type(LostReport.class).id(id)
                     .safe();
-            if (!report.getId().equals(user.getUserId())) {
+            if (!report.getUserId().equals(user.getUserId())) {
                 throw new OAuthRequestException("You do not have the " +
                         "premission to modify this report.");
             }

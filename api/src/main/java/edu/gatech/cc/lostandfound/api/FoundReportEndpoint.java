@@ -15,6 +15,7 @@ import com.google.appengine.api.search.Field;
 import com.google.appengine.api.search.GeoPoint;
 import com.google.appengine.api.search.Index;
 import com.google.appengine.api.search.IndexSpec;
+import com.google.appengine.api.search.MatchScorer;
 import com.google.appengine.api.search.PutException;
 import com.google.appengine.api.search.QueryOptions;
 import com.google.appengine.api.search.Results;
@@ -22,7 +23,12 @@ import com.google.appengine.api.search.ScoredDocument;
 import com.google.appengine.api.search.SearchServiceFactory;
 import com.google.appengine.api.search.SortExpression;
 import com.google.appengine.api.search.SortOptions;
+import com.google.appengine.api.taskqueue.DeferredTask;
+import com.google.appengine.api.taskqueue.Queue;
+import com.google.appengine.api.taskqueue.QueueFactory;
+import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
+import com.google.appengine.repackaged.com.google.common.base.Joiner;
 import com.googlecode.objectify.ObjectifyService;
 import com.googlecode.objectify.cmd.Query;
 
@@ -69,6 +75,7 @@ public class FoundReportEndpoint {
 
     private static final int DEFAULT_LIST_LIMIT = 20;
     private static final String DOC_INDEX = "foundReport";
+    private static final String MATCH_QUEUE = "matchFoundReport";
 
     static {
         // Typically you would register this inside an OfyServive wrapper.
@@ -148,12 +155,25 @@ public class FoundReportEndpoint {
                 (indexSpec);
         try {
             index.put(doc);
+            Queue queue = QueueFactory.getQueue(MATCH_QUEUE);
+            queue.add(TaskOptions.Builder.withPayload
+                    (new FoundMatchDeferredTask(foundReport.getId())));
         } catch (PutException e) {
             // TODO should retry
             logger.throwing(this.getClass().toString(), "insert", e);
         }
 
         return ofy().load().entity(foundReport).now();
+    }
+
+    @ApiMethod(
+            name = "foundReport.test",
+            path = "foundReport/test/{id}",
+            httpMethod = ApiMethod.HttpMethod.GET)
+    public void test(@Named("id") Long id) {
+        Queue queue = QueueFactory.getQueue(MATCH_QUEUE);
+        queue.add(TaskOptions.Builder.withPayload
+                (new FoundMatchDeferredTask(id)));
     }
 
     /**
@@ -214,6 +234,7 @@ public class FoundReportEndpoint {
     public CollectionResponse<FoundReport> list(@Nullable @Named("cursor")
                                                 String cursor, @Nullable
                                                 @Named("limit") Integer limit) {
+        //TODO sort by descending order of created
         limit = limit == null ? DEFAULT_LIST_LIMIT : limit;
         Query<FoundReport> query = ofy().load().type(FoundReport.class).limit
                 (limit);
@@ -278,6 +299,9 @@ public class FoundReportEndpoint {
                                                           limit) {
         // TODO may be use cursor and limit
         SortOptions sortOptions = SortOptions.newBuilder()
+                .setMatchScorer(MatchScorer.newBuilder().build())
+                .addSortExpression(SortExpression.newBuilder().setExpression
+                        ("_score"))
                 .addSortExpression(SortExpression.newBuilder().setExpression
                         ("_rank"))
                 .addSortExpression(SortExpression.newBuilder()
@@ -294,7 +318,10 @@ public class FoundReportEndpoint {
 
         com.google.appengine.api.search.Query query = com.google.appengine
                 .api.search.Query.newBuilder()
-                .setOptions(queryOptions).build(queryString);
+                .setOptions(queryOptions).build(Joiner.on(" OR ").join(
+                        queryString.trim().split
+                                ("\\s+")));
+
 
         IndexSpec indexSpec = IndexSpec.newBuilder().setName(DOC_INDEX)
                 .build();
@@ -307,8 +334,10 @@ public class FoundReportEndpoint {
                 .getNumberReturned());
 
         for (ScoredDocument match : results.getResults()) {
-            foundReportList.add(ofy().load().type(FoundReport
-                    .class).id(Long.parseLong(match.getId())).now());
+            FoundReport foundReport = ofy().load().type(FoundReport
+                    .class).id(Long.parseLong(match.getId())).now();
+            if (foundReport != null)
+                foundReportList.add(foundReport);
         }
 
         return CollectionResponse.<FoundReport>builder().setItems
@@ -322,6 +351,61 @@ public class FoundReportEndpoint {
         } catch (com.googlecode.objectify.NotFoundException e) {
             throw new NotFoundException("Could not find FoundReport with ID: " +
                     "" + id);
+        }
+    }
+
+    public static class FoundMatchDeferredTask implements DeferredTask {
+
+        final private Long id;
+
+        public FoundMatchDeferredTask(Long id) {
+            this.id = id;
+        }
+
+        @Override
+        public void run() {
+            FoundReport foundReport = ofy().load().type(FoundReport.class).id
+                    (id)
+                    .now();
+            if (foundReport == null) {
+                return;
+            }
+            SortOptions sortOptions = SortOptions.newBuilder()
+                    .setMatchScorer(MatchScorer.newBuilder().build())
+                    .addSortExpression(SortExpression.newBuilder().setExpression
+                            ("_score"))
+                    .addSortExpression(SortExpression.newBuilder().setExpression
+                            ("_rank"))
+                    .addSortExpression(SortExpression.newBuilder()
+                            .setExpression("created")
+                            .setDirection(SortExpression.SortDirection
+                                    .DESCENDING))
+                    .setLimit(DEFAULT_LIST_LIMIT)
+                    .build();
+
+            QueryOptions queryOptions = QueryOptions.newBuilder()
+                    .setLimit(DEFAULT_LIST_LIMIT)
+                    .setReturningIdsOnly(true)
+                    .setSortOptions(sortOptions)
+                    .build();
+
+            com.google.appengine.api.search.Query query = com.google.appengine
+                    .api.search.Query.newBuilder()
+                    .setOptions(queryOptions).build(Joiner.on(" OR ").join(
+                            (foundReport.getTitle() + " " + foundReport
+                                    .getDescription()).trim().split("\\s+")));
+
+            IndexSpec indexSpec = IndexSpec.newBuilder().setName
+                    (LostReportEndpoint.DOC_INDEX)
+                    .build();
+            Index index = SearchServiceFactory.getSearchService().getIndex
+                    (indexSpec);
+
+            Results<ScoredDocument> results = index.search(query);
+
+            logger.warning(String.format("Found %d results matching found " +
+                    "report with id " +
+                    "%s", results.getNumberFound(), id));
         }
     }
 }
