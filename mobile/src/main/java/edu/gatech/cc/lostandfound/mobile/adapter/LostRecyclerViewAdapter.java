@@ -1,22 +1,21 @@
 package edu.gatech.cc.lostandfound.mobile.adapter;
 
+import android.content.Intent;
+import android.graphics.Color;
+import android.net.Uri;
 import android.support.v7.widget.RecyclerView;
-import android.text.Html;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.CompoundButton;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.ToggleButton;
 
 import java.util.List;
 
+import edu.gatech.cc.lostandfound.api.lostAndFound.model.LostReport;
 import edu.gatech.cc.lostandfound.mobile.R;
-import edu.gatech.cc.lostandfound.mobile.activity.MainActivity;
-import edu.gatech.cc.lostandfound.mobile.entity.Position;
-import edu.gatech.cc.lostandfound.mobile.entity.ReportedLostObject;
+import edu.gatech.cc.lostandfound.mobile.activity.DetailLostActivity;
+import edu.gatech.cc.lostandfound.mobile.fragment.LostFragment;
 import edu.gatech.cc.lostandfound.mobile.time.TimeManager;
 
 /**
@@ -24,31 +23,31 @@ import edu.gatech.cc.lostandfound.mobile.time.TimeManager;
  */
 public class LostRecyclerViewAdapter extends RecyclerView.Adapter<LostRecyclerViewAdapter.ViewHolder> {
 
-    private List<ReportedLostObject> alRLO;
+    private List<LostReport> reports;
     private int rowLayout;
-    private MainActivity mAct;
+    private LostFragment fragment;
 
-    public LostRecyclerViewAdapter(List<ReportedLostObject> objectList, int rowLayout, MainActivity act) {
-        this.alRLO = objectList;
+    public LostRecyclerViewAdapter(List<LostReport> reports, int rowLayout, LostFragment fragment) {
+        this.reports = reports;
         this.rowLayout = rowLayout;
-        this.mAct = act;
+        this.fragment = fragment;
     }
 
 
     public void clearObjects() {
-        int size = this.alRLO.size();
+        int size = this.reports.size();
         if (size > 0) {
             for (int i = 0; i < size; i++) {
-                alRLO.remove(0);
+                reports.remove(0);
             }
 
             this.notifyItemRangeRemoved(0, size);
         }
     }
 
-    public void addObjects(List<ReportedLostObject> applications) {
-        this.alRLO.addAll(applications);
-        this.notifyItemRangeInserted(0, applications.size());
+    public void addObjects(List<LostReport> reports) {
+        this.reports.addAll(reports);
+        this.notifyItemRangeInserted(0, reports.size());
     }
 
     @Override
@@ -59,76 +58,68 @@ public class LostRecyclerViewAdapter extends RecyclerView.Adapter<LostRecyclerVi
 
     @Override
     public void onBindViewHolder(final ViewHolder viewHolder, int i) {
-        final ReportedLostObject obj = alRLO.get(i);
-        viewHolder.objectImage.setBackground(obj.image);
-        viewHolder.objectName.setText(obj.objectName);
-        viewHolder.username.setText(obj.owner);
-        viewHolder.timestamp.setText(TimeManager.getTimeDifferential(obj.timestamp));
-        viewHolder.expandBtn.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+        final LostReport report = reports.get(i);
+
+        viewHolder.title.setText(report.getTitle());
+        viewHolder.title.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                if (isChecked) {
-                    viewHolder.expandableLayout.setVisibility(View.VISIBLE);
-                } else {
-                    viewHolder.expandableLayout.setVisibility(View.GONE);
-                }
+            public void onClick(View v) {
+                Intent intent = new Intent();
+                intent.setClass(fragment.getActivity(), DetailLostActivity.class);
+
+                intent.putExtra("reportId", report.getId());
+                fragment.getActivity().startActivity(intent);
             }
         });
-        viewHolder.objectDescription.setText(Html.fromHtml("<b>Description: </b>"));
-        viewHolder.objectDescription.append("\n" + obj.description);
-
-        viewHolder.position.setText(Html.fromHtml("<b>Possible Positions: </b>"));
-        for (Position pos : obj.alPostions) {
-            viewHolder.position.append("\n" + pos.address + ";");
+        viewHolder.nickname.setText(report.getUserNickname());
+        viewHolder.timestamp.setText(TimeManager.getTimeDifferential(report.getCreated().getValue()));
+        viewHolder.emailBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent emailIntent = new Intent(Intent.ACTION_SENDTO, Uri.fromParts(
+                        "mailto", report.getUserNickname() + "@gmail.com", null));
+                emailIntent.putExtra(Intent.EXTRA_SUBJECT, "Subject");
+                emailIntent.putExtra(Intent.EXTRA_TEXT, "Body");
+                fragment.getActivity().startActivity(Intent.createChooser(emailIntent, "Send email..."));
+            }
+        });
+        if(report.getFound()) {
+            viewHolder.found.setText("Found");
+            viewHolder.found.setTextColor(Color.GREEN);
+        } else {
+            viewHolder.found.setText("Not Found");
+            viewHolder.found.setTextColor(Color.RED);
         }
-
-        viewHolder.detailedPosition.setText(Html.fromHtml("<b>Detailed Position: </b>"));
-        viewHolder.detailedPosition.append("\n" + obj.detailedPosition);
-
-        viewHolder.timeRange.setText(Html.fromHtml("<b>From: </b>" + obj
-                .fromDate + "\n" + "<b>To: </b>" + obj.toDate));
-
         viewHolder.itemView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-//                mAct.gotoDetailActivity(obj);
+
             }
         });
     }
 
+
     @Override
     public int getItemCount() {
-        return alRLO == null ? 0 : alRLO.size();
+        return reports == null ? 0 : reports.size();
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
 
-        public ImageView objectImage;
-        public TextView objectName;
-        public TextView username;
+        public TextView title;
+        public TextView nickname;
         public TextView timestamp;
-        public ToggleButton expandBtn;
-
-        public LinearLayout expandableLayout;
-        public TextView objectDescription;
-        public TextView position;
-        public TextView detailedPosition;
-        public TextView timeRange;
+        public ImageView emailBtn;
+        public TextView found;
 
 
         public ViewHolder(View itemView) {
             super(itemView);
-            objectImage = (ImageView) itemView.findViewById(R.id.objectImage);
-            objectName = (TextView) itemView.findViewById(R.id.objectName);
-            username = (TextView) itemView.findViewById(R.id.username);
+            title = (TextView) itemView.findViewById(R.id.title);
+            nickname = (TextView) itemView.findViewById(R.id.nickname);
             timestamp = (TextView) itemView.findViewById(R.id.timestamp);
-            expandBtn = (ToggleButton) itemView.findViewById(R.id.expandBtn);
-
-            expandableLayout = (LinearLayout) itemView.findViewById(R.id.expandableLayout);
-            objectDescription = (TextView) itemView.findViewById(R.id.objectDescription);
-            position = (TextView) itemView.findViewById(R.id.position);
-            detailedPosition = (TextView) itemView.findViewById(R.id.detailedPosition);
-            timeRange = (TextView) itemView.findViewById(R.id.timeRange);
+            emailBtn = (ImageView) itemView.findViewById(R.id.emailBtn);
+            found = (TextView) itemView.findViewById(R.id.found);
         }
 
     }

@@ -24,19 +24,25 @@ import com.google.appengine.api.search.ScoredDocument;
 import com.google.appengine.api.search.SearchServiceFactory;
 import com.google.appengine.api.search.SortExpression;
 import com.google.appengine.api.search.SortOptions;
+import com.google.appengine.api.taskqueue.DeferredTask;
+import com.google.appengine.api.taskqueue.Queue;
+import com.google.appengine.api.taskqueue.QueueFactory;
+import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
-import com.google.appengine.repackaged.com.google.common.base.Joiner;
 import com.googlecode.objectify.ObjectifyService;
 import com.googlecode.objectify.cmd.Query;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.inject.Named;
 
+import edu.gatech.cc.lostandfound.api.model.FoundReport;
 import edu.gatech.cc.lostandfound.api.model.LostReport;
 
 import static com.googlecode.objectify.ObjectifyService.ofy;
@@ -45,7 +51,7 @@ import static com.googlecode.objectify.ObjectifyService.ofy;
         name = "lostAndFound",
         version = "v1",
         resource = "reports",
-        scopes = {Constants.EMAIL_SCOPE},
+        scopes = {Constants.EMAIL_SCOPE, Constants.PROFILE_SCOPE},
         clientIds = {Constants.WEB_CLIENT_ID, Constants.ANDROID_CLIENT_ID,
                 com.google.api.server.spi.Constant.API_EXPLORER_CLIENT_ID},
         audiences = {Constants.ANDROID_AUDIENCE},
@@ -58,6 +64,7 @@ import static com.googlecode.objectify.ObjectifyService.ofy;
 public class LostReportEndpoint {
 
     protected static final String DOC_INDEX = "lostReport";
+    private static final String MATCH_QUEUE = "matchLostReport";
     private static final Logger logger = Logger.getLogger(LostReportEndpoint
             .class.getName());
     private static final int DEFAULT_LIST_LIMIT = 20;
@@ -109,8 +116,9 @@ public class LostReportEndpoint {
         if (lostReport.getId() != null) {
             throw new BadRequestException("Invalid report object.");
         }
-        logger.info("For user: " + user.getEmail() + " " + user.getUserId());
-        lostReport.setUserId(user.getUserId());
+        user = UserHelper.fixUser(user);
+        logger.info("For user: " + user.getEmail());
+        lostReport.setUserId(user.getEmail());
         lostReport.setUserNickname(user.getNickname());
 
         ofy().save().entity(lostReport).now();
@@ -140,12 +148,26 @@ public class LostReportEndpoint {
                 (indexSpec);
         try {
             index.put(doc);
+            Queue queue = QueueFactory.getQueue(MATCH_QUEUE);
+            queue.add(TaskOptions.Builder.withPayload
+                    (new LostMatchDeferredTask(lostReport.getId())));
         } catch (PutException e) {
             // TODO should retry
             logger.throwing(this.getClass().toString(), "insert", e);
         }
         return ofy().load().entity(lostReport).now();
     }
+
+    @ApiMethod(
+            name = "lostReport.test",
+            path = "lostReport/test/{id}",
+            httpMethod = ApiMethod.HttpMethod.GET)
+    public void test(@Named("id") Long id) {
+        Queue queue = QueueFactory.getQueue(MATCH_QUEUE);
+        queue.add(TaskOptions.Builder.withPayload
+                (new LostMatchDeferredTask(id)));
+    }
+
 
     /**
      * Updates an existing {@code LostReport}.
@@ -168,6 +190,7 @@ public class LostReportEndpoint {
             throw new OAuthRequestException("You need to login to modify " +
                     "reports.");
         }
+        user = UserHelper.fixUser(user);
         if (!id.equals(lostReport.getId())) {
             throw new BadRequestException("Invalid report object.");
         }
@@ -195,6 +218,7 @@ public class LostReportEndpoint {
             throw new OAuthRequestException("You need to login to modify " +
                     "reports.");
         }
+        user = UserHelper.fixUser(user);
         logger.info("For user: " + user.getEmail());
         checkOwns(id, user);
         ofy().delete().type(LostReport.class).id(id).now();
@@ -247,13 +271,12 @@ public class LostReportEndpoint {
             throw new OAuthRequestException("You need to login to list your " +
                     "reports.");
         }
+        user = UserHelper.fixUser(user);
         logger.info("For user: " + user.getEmail());
 
         limit = limit == null ? DEFAULT_LIST_LIMIT : limit;
         Query<LostReport> query = ofy().load().type(LostReport.class).filter
-                ("userId", user
-                        .getUserId
-                                ()).order("-created").limit(limit);
+                ("userId", user.getEmail()).order("-created").limit(limit);
 
         if (cursor != null) {
             query = query.startAt(Cursor.fromWebSafeString(cursor));
@@ -299,9 +322,8 @@ public class LostReportEndpoint {
 
         com.google.appengine.api.search.Query query = com.google.appengine
                 .api.search.Query.newBuilder()
-                .setOptions(queryOptions).build(Joiner.on(" OR ").join(
-                        queryString.trim().split
-                                ("\\s+")));
+                .setOptions(queryOptions).build(QueryHelper.sanitize
+                        (queryString));
 
         IndexSpec indexSpec = IndexSpec.newBuilder().setName(DOC_INDEX)
                 .build();
@@ -330,13 +352,104 @@ public class LostReportEndpoint {
         try {
             LostReport report = ofy().load().type(LostReport.class).id(id)
                     .safe();
-            if (!report.getUserId().equals(user.getUserId())) {
+            if (!report.getUserId().equals(user.getEmail())) {
                 throw new OAuthRequestException("You do not have the " +
                         "premission to modify this report.");
             }
         } catch (com.googlecode.objectify.NotFoundException e) {
             throw new NotFoundException("Could not find LostReport with ID: "
                     + id);
+        }
+    }
+
+    public static class LostMatchDeferredTask implements DeferredTask {
+
+        final private Long id;
+
+        public LostMatchDeferredTask(Long id) {
+            this.id = id;
+        }
+
+        @Override
+        public void run() {
+            // TODO add time lost and creation to query
+            LostReport lostReport = ofy().load().type(LostReport.class).id
+                    (id)
+                    .now();
+            if (lostReport == null) {
+                return;
+            }
+            SortOptions sortOptions = SortOptions.newBuilder()
+                    .setMatchScorer(MatchScorer.newBuilder().build())
+                    .addSortExpression(SortExpression.newBuilder().setExpression
+                            ("_score"))
+                    .addSortExpression(SortExpression.newBuilder().setExpression
+                            ("_rank"))
+                    .addSortExpression(SortExpression.newBuilder()
+                            .setExpression("created")
+                            .setDirection(SortExpression.SortDirection
+                                    .DESCENDING))
+                    .setLimit(DEFAULT_LIST_LIMIT)
+                    .build();
+
+            QueryOptions queryOptions = QueryOptions.newBuilder()
+                    .setLimit(DEFAULT_LIST_LIMIT)
+                    .setReturningIdsOnly(true)
+                    .setSortOptions(sortOptions)
+                    .build();
+
+            StringBuilder sb = new StringBuilder("(" + QueryHelper.sanitize
+                    (lostReport.getTitle() + " " +
+                            lostReport.getDescription())
+                    + ")");
+            if (lostReport.getLocations().size() > 0) {
+                sb.append(" AND (");
+            }
+            for (int i = 0; i < lostReport.getLocations().size(); ++i) {
+                if (i > 0) {
+                    sb.append(" OR ");
+                }
+                GeoPt location = lostReport.getLocations().get(i);
+                sb.append("distance(location, geopoint(" +
+                        location.getLatitude() + "," +
+                        location.getLongitude() + ")) < 26");
+            }
+            if (lostReport.getLocations().size() > 0) {
+                sb.append(")");
+            }
+            com.google.appengine.api.search.Query query = com.google.appengine
+                    .api.search.Query.newBuilder()
+                    .setOptions(queryOptions).build(sb.toString());
+
+            IndexSpec indexSpec = IndexSpec.newBuilder().setName
+                    (FoundReportEndpoint.DOC_INDEX)
+                    .build();
+            Index index = SearchServiceFactory.getSearchService().getIndex
+                    (indexSpec);
+
+            Results<ScoredDocument> results = index.search(query);
+
+            ArrayList<Long> ids = new ArrayList<>();
+            Set<String> users = new HashSet<>();
+            for (ScoredDocument doc : results.getResults()) {
+                ids.add(Long.parseLong(doc.getId()));
+                FoundReport foundReport = ofy().load().type(FoundReport
+                        .class).id(Long.parseLong(doc.getId())).now();
+                if (foundReport != null) {
+                    if (!foundReport.getReturned())
+                        users.add(foundReport.getUserId());
+                }
+
+            }
+
+            if (!users.isEmpty()) {
+                NotificationHelper.notify(users, "Lost" + lostReport.getId());
+
+            }
+
+            logger.warning(String.format("Found %d results matching lost " +
+                    "report with id " +
+                    "%s: [%s]", results.getNumberFound(), id, ids));
         }
     }
 }

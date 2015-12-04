@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_id": "cs6235proj",
+    "project_number": "305182125868",
+    "name": "CS6235Proj"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:305182125868:android:852fbc063abda342",
+        "client_id": "android:edu.gatech.cc.lostandfound",
+        "client_type": 1,
+        "android_client_info": {
+          "package_name": "edu.gatech.cc.lostandfound"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [],
+      "services": {
+        "analytics_service": {
+          "status": 1
+        },
+        "cloud_messaging_service": {
+          "status": 2,
+          "apns_config": []
+        },
+        "appinvite_service": {
+          "status": 1,
+          "other_platform_oauth_client": []
+        },
+        "google_signin_service": {
+          "status": 1
+        },
+        "ads_service": {
+          "status": 1
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:305182125868:android:43c1e57ba728d993",
+        "client_id": "android:edu.gatech.cc.lostandfound.mobile",
+        "client_type": 1,
+        "android_client_info": {
+          "package_name": "edu.gatech.cc.lostandfound.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "305182125868-drmi0rhhibd2co9rb4ks5k0basova47p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.gatech.cc.lostandfound.mobile",
+            "certificate_hash": "407CD7D289653671E2E63A628DCFE527CAC29273"
+          }
+        }
+      ],
+      "api_key": [],
+      "services": {
+        "analytics_service": {
+          "status": 1
+        },
+        "cloud_messaging_service": {
+          "status": 2,
+          "apns_config": []
+        },
+        "appinvite_service": {
+          "status": 1,
+          "other_platform_oauth_client": []
+        },
+        "google_signin_service": {
+          "status": 2
+        },
+        "ads_service": {
+          "status": 1
+        }
+      }
+    }
+  ],
+  "client_info": [],
+  "ARTIFACT_VERSION": "1"
+}

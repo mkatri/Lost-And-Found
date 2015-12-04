@@ -1,5 +1,12 @@
 package edu.gatech.cc.lostandfound.mobile.googlemaps;
 
+import android.content.Context;
+import android.location.Address;
+import android.location.Geocoder;
+import android.util.Log;
+
+import com.google.android.gms.maps.model.LatLng;
+
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -9,6 +16,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Created by guoweidong on 11/3/15.
@@ -18,7 +26,7 @@ public class LocationHelper {
     private static final String URL_GOOGLE_MAP_GEOCODE = "https://maps.googleapis.com/maps/api/geocode/";
     private static final String URL_OUTPUT_FORMAT = "json";
     // This key should be different when application changes
-    private static final String GOOGLE_MAP_BROWSER_KEY = "AIzaSyDKlQpSjdD1awBBuK9b94oIOSR22BuKFb8";
+    private static final String GOOGLE_MAP_BROWSER_KEY = "AIzaSyDC3r_jmFqSdDTRlCD9c5k96kQ_d35TwDE";
 
     /**
      * This method must not be run in UI thread
@@ -27,9 +35,9 @@ public class LocationHelper {
      * @return
      */
     public static List<HashMap<String, String>> getAutoCompletePlaces(String query) {
+
         String url = getAutoCompleteURL(query);
         String data = downloadFromURL(url);
-
         List<HashMap<String, String>> res = AutoCompleteJSONParser.parse(data);
         return res;
     }
@@ -46,6 +54,24 @@ public class LocationHelper {
         // Columns can be id, reference, description
         HashMap<String, String> res = PlaceDetailsJSONParser.parse(data);
         return res;
+    }
+
+    public static String getAddress(Context context, LatLng latLng) {
+        Geocoder geocoder = new Geocoder(context, Locale.US);
+        String address = "";
+        try {
+            List<Address> list = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 5);
+            if(list.size() > 0) {
+                StringBuffer sb = new StringBuffer();
+                for(int i = 0; i < list.get(0).getMaxAddressLineIndex(); i++) {
+                    sb.append(list.get(0).getAddressLine(i));
+                }
+                address = sb.toString();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return address;
     }
 
     private static String getAutoCompleteURL(String query) {
@@ -135,8 +161,9 @@ public class LocationHelper {
             } catch (Exception e) {
                 e.printStackTrace();
             }
-
         }
         return data;
     }
+
+
 }

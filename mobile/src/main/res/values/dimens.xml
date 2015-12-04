@@ -8,6 +8,7 @@
     <dimen name="navigation_drawer_text_margin_left">16dp</dimen>
     <dimen name="navigation_drawer_username_margin_bottom">32dp</dimen>
     <dimen name="navigation_drawer_email_margin_bottom">16dp</dimen>
+    <dimen name="navigation_drawer_photo_size">64dp</dimen>
     <!-- main layout -->
     <dimen name="app_bar_height">256dp</dimen>
     <dimen name="fab_margin_right">16dp</dimen>
@@ -15,9 +16,13 @@
     <!-- cardview -->
     <dimen name="cardview_margin">5dp</dimen>
     <dimen name="cardview_image_size">72dp</dimen>
+    <dimen name="cardview_large_image_size">360dp</dimen>
     <dimen name="cardview_image_margin">4dp</dimen>
     <dimen name="cardview_text_margin">12dp</dimen>
     <dimen name="cardview_expand_selector_size">24dp</dimen>
+    <dimen name="cardview_small_icon_size">16dp</dimen>
+    <dimen name="cardview_large_icon_size">32dp</dimen>
+
     <dimen name="cardview_expand_margin_bottom">16dp</dimen>
     <dimen name="cardview_options_ic_size">24dp</dimen>
     <!-- report lost-->

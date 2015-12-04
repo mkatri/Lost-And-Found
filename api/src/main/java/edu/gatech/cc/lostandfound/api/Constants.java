@@ -9,10 +9,14 @@ public final class Constants {
             "305182125868-mfi6dkvas2urslsqk63n0b95visda9oe.apps" +
                     ".googleusercontent.com";
     public static final String ANDROID_CLIENT_ID =
-            "305182125868-56986397pe8i2qg85h4uogcub237bprj.apps.googleusercontent.com";
+            "305182125868-drmi0rhhibd2co9rb4ks5k0basova47p.apps" +
+                    ".googleusercontent.com";
     public static final String ANDROID_AUDIENCE = WEB_CLIENT_ID;
 
     public static final String EMAIL_SCOPE = "https://www.googleapis" +
             ".com/auth/userinfo.email";
-
+    public static final String PROFILE_SCOPE = "https://www.googleapis" +
+            ".com/auth/userinfo.profile";
+    public static final String GCM_API_KEY =
+            "AIzaSyAjwXxTpdneLZBnxQX-Vrh8BkgAFRU3B8I";
 }

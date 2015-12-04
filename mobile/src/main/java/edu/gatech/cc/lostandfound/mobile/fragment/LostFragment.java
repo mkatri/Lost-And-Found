@@ -20,7 +20,6 @@ import edu.gatech.cc.lostandfound.api.lostAndFound.model.LostReport;
 import edu.gatech.cc.lostandfound.mobile.R;
 import edu.gatech.cc.lostandfound.mobile.activity.MainActivity;
 import edu.gatech.cc.lostandfound.mobile.adapter.LostRecyclerViewAdapter;
-import edu.gatech.cc.lostandfound.mobile.entity.ReportedLostObject;
 import edu.gatech.cc.lostandfound.mobile.network.Api;
 
 
@@ -30,8 +29,8 @@ public class LostFragment extends Fragment {
     private ProgressBar mProgressBar;
 
     private LostRecyclerViewAdapter rvAdapter;
-    private ArrayList<ReportedLostObject> alRLO = new
-            ArrayList<ReportedLostObject>();
+    private ArrayList<LostReport> reports = new
+            ArrayList<LostReport>();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -49,8 +48,8 @@ public class LostFragment extends Fragment {
         mRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
         rvAdapter = new LostRecyclerViewAdapter(new
-                ArrayList<ReportedLostObject>(), R.layout.cardview_lost,
-                (MainActivity) getActivity());
+                ArrayList<LostReport>(), R.layout.cardview_lost,
+                this);
         mRecyclerView.setAdapter(rvAdapter);
 
         mSwipeRefreshLayout = (SwipeRefreshLayout) view.findViewById(R.id
@@ -73,7 +72,19 @@ public class LostFragment extends Fragment {
         mProgressBar.setVisibility(View.VISIBLE);
         return view;
     }
-
+    public void updateObjects() {
+        new InitializeObjectsTask().execute();
+    }
+    public void setmProgressBar(boolean isVisible) {
+        if(isVisible) {
+            mProgressBar.setVisibility(View.VISIBLE);
+        } else {
+            mProgressBar.setVisibility(View.GONE);
+        }
+    }
+    public void searchObjects(String keywords) {
+        new InitializeObjectsTask().execute(keywords);
+    }
     private class InitializeObjectsTask extends AsyncTask<String, Void, Void> {
 
         @Override
@@ -84,13 +95,18 @@ public class LostFragment extends Fragment {
 
         @Override
         protected Void doInBackground(String... params) {
-            alRLO.clear();
+            reports.clear();
+
             try {
-                CollectionResponseLostReport lostReports = Api.getClient()
-                        .lostReport().list().execute();
+                CollectionResponseLostReport lostReports = null;
+                if(params.length == 0) {
+                    lostReports = Api.getClient().lostReport().list().execute();
+                } else {
+                    lostReports = Api.getClient().lostReport().search(params[0]).execute();
+                }
                 if (lostReports.getItems() != null) {
                     for (LostReport report : lostReports.getItems()) {
-                        alRLO.add(new ReportedLostObject(report));
+                        reports.add(report);
                     }
                 }
             } catch (IOException e) {
@@ -108,9 +124,8 @@ public class LostFragment extends Fragment {
             mProgressBar.setVisibility(View.GONE);
 
             //set data for list
-            rvAdapter.addObjects(alRLO);
+            rvAdapter.addObjects(reports);
             mSwipeRefreshLayout.setRefreshing(false);
-
 
         }
 

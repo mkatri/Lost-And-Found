@@ -21,100 +21,43 @@ public class DraggableCircle {
     private static final int FILL_COLOR = Color.argb(122, 255, 0, 0);
     private static final int STORKE_COLOR = Color.BLACK;
     private static final int STROKE_WIDTH = 0;
-    private static final double DEFAULT_RADIUS = 50;
+    private static final double DEFAULT_RADIUS = 25;
     private final Marker centerMarker;
-
-    private final Marker radiusMarker;
 
     private final Circle circle;
 
     private String address;
 
-    private double radius;
     private GoogleMap mMap;
 
-    public DraggableCircle(GoogleMap mMap, LatLng center, double radius, String address) {
-        this.mMap = mMap;
-        this.radius = radius;
-        centerMarker = mMap.addMarker(new MarkerOptions()
-                .position(center)
-                .title("Delete")
-                .draggable(true));
-        radiusMarker = mMap.addMarker(new MarkerOptions()
-                .position(toRadiusLatLng(center, radius))
-                .draggable(true)
-                .icon(BitmapDescriptorFactory.defaultMarker(
-                        BitmapDescriptorFactory.HUE_AZURE)));
-        circle = mMap.addCircle(new CircleOptions()
-                .center(center)
-                .radius(radius)
-                .strokeWidth(STROKE_WIDTH)
-                .strokeColor(STORKE_COLOR)
-                .fillColor(FILL_COLOR));
-        this.address = address;
-    }
-
-    public DraggableCircle(GoogleMap mMap, LatLng center, LatLng radiusLatLng, String address) {
-        this.mMap = mMap;
-        this.radius = toRadiusMeters(center, radiusLatLng);
-        centerMarker = mMap.addMarker(new MarkerOptions()
-                .position(center)
-                .title("Delete")
-                .draggable(true));
-        radiusMarker = mMap.addMarker(new MarkerOptions()
-                .position(radiusLatLng)
-                .draggable(true)
-                .icon(BitmapDescriptorFactory.defaultMarker(
-                        BitmapDescriptorFactory.HUE_AZURE)));
-        circle = mMap.addCircle(new CircleOptions()
-                .center(center)
-                .radius(radius)
-                .strokeWidth(STROKE_WIDTH)
-                .strokeColor(STORKE_COLOR)
-                .fillColor(FILL_COLOR));
-        this.address = address;
-    }
-
     public DraggableCircle(GoogleMap mMap, LatLng center, String address) {
-        this(mMap, center, DEFAULT_RADIUS, address);
-    }
+        this.mMap = mMap;
+        centerMarker = mMap.addMarker(new MarkerOptions()
+                .position(center)
+                .title("Delete")
+                .draggable(true));
 
-    public static LatLng toRadiusLatLng(LatLng center, double radius) {
-        double radiusAngle = Math.toDegrees(radius / RADIUS_OF_EARTH_METERS) /
-                Math.cos(Math.toRadians(center.latitude));
-        return new LatLng(center.latitude, center.longitude + radiusAngle);
-    }
-
-    public static double toRadiusMeters(LatLng center, LatLng radius) {
-        float[] result = new float[1];
-        Location.distanceBetween(center.latitude, center.longitude,
-                radius.latitude, radius.longitude, result);
-        return result[0];
+        circle = mMap.addCircle(new CircleOptions()
+                .center(center)
+                .radius(DEFAULT_RADIUS)
+                .strokeWidth(STROKE_WIDTH)
+                .strokeColor(STORKE_COLOR)
+                .fillColor(FILL_COLOR));
+        this.address = address;
     }
 
     public boolean onCenterMarkerMoved(Marker marker) {
         if (marker.equals(centerMarker)) {
             circle.setCenter(marker.getPosition());
-            radiusMarker.setPosition(toRadiusLatLng(marker.getPosition(), radius));
-            return true;
-        }
-        return false;
-    }
-
-    public boolean onRadiusMarkerMoved(Marker marker) {
-        if (marker.equals(radiusMarker)) {
-            radius = toRadiusMeters(centerMarker.getPosition(), radiusMarker.getPosition());
-            circle.setRadius(radius);
             return true;
         }
         return false;
     }
 
     public boolean remove(Marker marker) {
-        if (marker.equals(centerMarker) || marker.equals(radiusMarker)) {
+        if (marker.equals(centerMarker)) {
             circle.remove();
             centerMarker.remove();
-            radiusMarker.remove();
             return true;
         }
         return false;
@@ -129,7 +72,7 @@ public class DraggableCircle {
         return "Address: " + address + "\n" +
                 "Latitude:" + centerMarker.getPosition().latitude + "\n" +
                 "Longitude:" + centerMarker.getPosition().longitude + "\n" +
-                "Radius:" + radius;
+                "Radius:" + DEFAULT_RADIUS;
     }
 
     public void getPosition(Position pos) {

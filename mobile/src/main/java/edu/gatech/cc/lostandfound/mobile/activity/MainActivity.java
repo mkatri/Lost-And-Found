@@ -1,8 +1,15 @@
 package edu.gatech.cc.lostandfound.mobile.activity;
 
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.design.widget.CoordinatorLayout;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
@@ -12,6 +19,7 @@ import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -19,17 +27,31 @@ import android.widget.ImageView;
 import android.widget.SearchView;
 import android.widget.TextView;
 
+import com.google.android.gms.auth.api.Auth;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Status;
 import com.google.api.client.googleapis.extensions.android.gms.auth
         .GoogleAccountCredential;
 
+import java.net.HttpURLConnection;
+import java.net.URL;
+
 import edu.gatech.cc.lostandfound.mobile.R;
 import edu.gatech.cc.lostandfound.mobile.adapter.ViewPagerAdapter;
+import edu.gatech.cc.lostandfound.mobile.fragment.FoundFragment;
+import edu.gatech.cc.lostandfound.mobile.fragment.LostFragment;
 import edu.gatech.cc.lostandfound.mobile.network.Api;
+import edu.gatech.cc.lostandfound.mobile.notification.RegistrationIntentService;
+import edu.gatech.cc.lostandfound.mobile.utility.Constants;
 
 
 public class MainActivity extends AppCompatActivity implements NavigationView
-        .OnNavigationItemSelectedListener, ViewPager.OnPageChangeListener {
-    static final String[] titles = {"Lost", "Found", "My Posts"};
+        .OnNavigationItemSelectedListener, ViewPager.OnPageChangeListener, GoogleApiClient.OnConnectionFailedListener {
+    static final String[] titles = {"Lost", "Found", "My Post"};
     private static final String AUDIENCE =
             "server:client_id:305182125868-mfi6dkvas2urslsqk63n0b95visda9oe" +
                     ".apps.googleusercontent.com";
@@ -38,6 +60,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView
     DrawerLayout drawerLayout;
     ActionBarDrawerToggle drawerToggle;
     CoordinatorLayout rootLayout;
+    ViewPagerAdapter viewPagerAdapter;
     ViewPager viewPager;
     FloatingActionButton fabBtn;
     NavigationView navigation;
@@ -46,13 +69,26 @@ public class MainActivity extends AppCompatActivity implements NavigationView
     TextView emailaddress;
     SearchView searchView;
     MenuItem searchItem;
+    private BroadcastReceiver mRegistrationBroadcastReceiver;
+    private GoogleApiClient googleApiClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        //initialize Google Sign in
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .build();
+        googleApiClient = new GoogleApiClient.Builder(this)
+                .enableAutoManage(this /* FragmentActivity */, this /* OnConnectionFailedListener */)
+                .addApi(Auth.GOOGLE_SIGN_IN_API, gso)
+                .build();
+
+
         //initiate toolbar and navigation drawer
         toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setNotificationClient();
         setSupportActionBar(toolbar);
         getSupportActionBar().setHomeButtonEnabled(true);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
@@ -74,9 +110,33 @@ public class MainActivity extends AppCompatActivity implements NavigationView
         String userEmailAddress = getSharedPreferences("LostAndFound", 0)
                 .getString(Constants.PREF_ACCOUNT_NAME, null);
         emailaddress.setText(userEmailAddress);
+        new AsyncTask<String, Void, Drawable>() {
+            @Override
+            protected Drawable doInBackground(String... params) {
+
+                try {
+                    URL url = new URL(params[0]);
+
+                    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+                    connection.connect();
+                    Drawable drawable = BitmapDrawable.createFromStream(connection.getInputStream(), params[0]);
+                    return drawable;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Drawable drawable) {
+                super.onPostExecute(drawable);
+                userImage.setBackground(drawable);
+            }
+        }.execute(getSharedPreferences("LostAndFound", 0).getString(Constants
+                .PREF_ACCOUNT_PHOTO_URL, null));
         //initiate viewpager
         viewPager = (ViewPager) findViewById(R.id.viewpager);
-        ViewPagerAdapter viewPagerAdapter = new ViewPagerAdapter
+        viewPagerAdapter = new ViewPagerAdapter
                 (getSupportFragmentManager(), titles.length);
         viewPager.addOnPageChangeListener(this);
         viewPager.setAdapter(viewPagerAdapter);
@@ -107,7 +167,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView
         credential = GoogleAccountCredential
                 .usingAudience(this,
                         AUDIENCE);
+        Log.d("show me my name", userEmailAddress);
         credential.setSelectedAccountName(userEmailAddress);
+        Log.d("show me what's set", credential.getSelectedAccountName());
 
         Api.initialize(credential);
     }
@@ -145,6 +207,11 @@ public class MainActivity extends AppCompatActivity implements NavigationView
     }
 
     @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        Log.i("myinfo", connectionResult.getErrorMessage());
+    }
+
+    @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
@@ -158,8 +225,20 @@ public class MainActivity extends AppCompatActivity implements NavigationView
 
 
         switch (id) {
-            case R.id.action_settings:
-                return true;
+            case R.id.action_logout:
+                Auth.GoogleSignInApi.signOut(googleApiClient).setResultCallback(
+                        new ResultCallback<Status>() {
+                            @Override
+                            public void onResult(Status status) {
+                                if(status.isSuccess()) {
+                                    finish();
+                                } else {
+                                    Log.i("myinfo", "Sign out failure");
+                                }
+                            }
+                        }
+                );
+                finish();
             case R.id.action_search:
                 getSupportActionBar().setDisplayShowCustomEnabled(true);
                 //enable it to display a
@@ -199,9 +278,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView
                                 .getAdapter()).getItem(viewPager
                                 .getCurrentItem());
                         if (viewPager.getCurrentItem() == 0) {
-
-                        } else {
-
+                            ((LostFragment)viewPagerAdapter.getRegisteredFragment(0)).searchObjects(query);
+                        } else if(viewPager.getCurrentItem() == 1) {
+                            ((FoundFragment)viewPagerAdapter.getRegisteredFragment(1)).searchObjects(query);
                         }
 
                         return false;
@@ -257,7 +336,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView
                 fabBtn.setVisibility(View.VISIBLE);
                 break;
             case 2:
-                if (searchView != null) {
+                if(searchView != null) {
                     searchView.clearFocus();
                 }
                 searchItem.setVisible(false);
@@ -275,5 +354,38 @@ public class MainActivity extends AppCompatActivity implements NavigationView
     @Override
     public void onPageScrollStateChanged(int state) {
 
+    }
+
+
+    //Notification
+    /**
+     * Check the device to make sure it has the Google Play Services APK. If
+     * it doesn't, display a dialog that allows users to download the APK from
+     * the Google Play Store or enable it in the device's system settings.
+     */
+    private static final int PLAY_SERVICES_RESOLUTION_REQUEST = 9000;
+    private boolean checkPlayServices() {
+        GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
+        int resultCode = apiAvailability.isGooglePlayServicesAvailable(this);
+        if (resultCode != ConnectionResult.SUCCESS) {
+            if (apiAvailability.isUserResolvableError(resultCode)) {
+                apiAvailability.getErrorDialog(this, resultCode, PLAY_SERVICES_RESOLUTION_REQUEST)
+                        .show();
+            } else {
+                Log.i("myinfo", "This device is not supported.");
+                finish();
+            }
+            return false;
+        }
+        return true;
+    }
+
+    public void setNotificationClient() {
+
+        if (checkPlayServices()) {
+            // Start IntentService to register this application with GCM.
+            Intent intent = new Intent(this, RegistrationIntentService.class);
+            startService(intent);
+        }
     }
 }

@@ -2,18 +2,22 @@ package edu.gatech.cc.lostandfound.api.model;
 
 import com.googlecode.objectify.annotation.Entity;
 import com.googlecode.objectify.annotation.Id;
+import com.googlecode.objectify.annotation.Index;
 
 /**
  * Created by mkatri on 12/3/15.
  */
 @Entity
-public class Token {
+public class TokenRegistration {
 
     @Id
     Long id;
     String token;
+    @Index
+    String userId;
 
-    public Token() {
+    //TODO support multiple tokens per user
+    public TokenRegistration() {
     }
 
     public String getToken() {
@@ -22,5 +26,13 @@ public class Token {
 
     public void setToken(String token) {
         this.token = token;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 }

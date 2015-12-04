@@ -28,12 +28,13 @@ import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.QueueFactory;
 import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
-import com.google.appengine.repackaged.com.google.common.base.Joiner;
 import com.googlecode.objectify.ObjectifyService;
 import com.googlecode.objectify.cmd.Query;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import javax.annotation.Nonnull;
@@ -41,6 +42,7 @@ import javax.annotation.Nullable;
 import javax.inject.Named;
 
 import edu.gatech.cc.lostandfound.api.model.FoundReport;
+import edu.gatech.cc.lostandfound.api.model.LostReport;
 
 import static com.googlecode.objectify.ObjectifyService.ofy;
 
@@ -58,7 +60,7 @@ import static com.googlecode.objectify.ObjectifyService.ofy;
         name = "lostAndFound",
         version = "v1",
         resource = "reports",
-        scopes = {Constants.EMAIL_SCOPE},
+        scopes = {Constants.EMAIL_SCOPE, Constants.PROFILE_SCOPE},
         clientIds = {Constants.WEB_CLIENT_ID, Constants.ANDROID_CLIENT_ID,
                 com.google.api.server.spi.Constant.API_EXPLORER_CLIENT_ID},
         audiences = {Constants.ANDROID_AUDIENCE},
@@ -70,11 +72,10 @@ import static com.googlecode.objectify.ObjectifyService.ofy;
 )
 public class FoundReportEndpoint {
 
+    public static final String DOC_INDEX = "foundReport";
     private static final Logger logger = Logger.getLogger(FoundReportEndpoint
             .class.getName());
-
     private static final int DEFAULT_LIST_LIMIT = 20;
-    private static final String DOC_INDEX = "foundReport";
     private static final String MATCH_QUEUE = "matchFoundReport";
 
     static {
@@ -124,8 +125,9 @@ public class FoundReportEndpoint {
         if (foundReport.getId() != null) {
             throw new BadRequestException("Invalid report object.");
         }
+        user = UserHelper.fixUser(user);
         logger.info("For user: " + user.getEmail());
-        foundReport.setUserId(user.getUserId());
+        foundReport.setUserId(user.getEmail());
         foundReport.setUserNickname(user.getNickname());
 
         ofy().save().entity(foundReport).now();
@@ -266,13 +268,13 @@ public class FoundReportEndpoint {
             throw new OAuthRequestException("You need to login to list your " +
                     "reports.");
         }
+        user = UserHelper.fixUser(user);
         logger.info("For user: " + user.getEmail());
 
         limit = limit == null ? DEFAULT_LIST_LIMIT : limit;
         Query<FoundReport> query = ofy().load().type(FoundReport.class).filter
                 ("userId", user
-                        .getUserId
-                                ()).order("-created").limit(limit);
+                        .getEmail()).order("-created").limit(limit);
 
         if (cursor != null) {
             query = query.startAt(Cursor.fromWebSafeString(cursor));
@@ -318,9 +320,8 @@ public class FoundReportEndpoint {
 
         com.google.appengine.api.search.Query query = com.google.appengine
                 .api.search.Query.newBuilder()
-                .setOptions(queryOptions).build(Joiner.on(" OR ").join(
-                        queryString.trim().split
-                                ("\\s+")));
+                .setOptions(queryOptions).build(QueryHelper.sanitize
+                        (queryString));
 
 
         IndexSpec indexSpec = IndexSpec.newBuilder().setName(DOC_INDEX)
@@ -355,7 +356,7 @@ public class FoundReportEndpoint {
     }
 
     public static class FoundMatchDeferredTask implements DeferredTask {
-
+        // TODO add time lost and creation to query
         final private Long id;
 
         public FoundMatchDeferredTask(Long id) {
@@ -391,9 +392,15 @@ public class FoundReportEndpoint {
 
             com.google.appengine.api.search.Query query = com.google.appengine
                     .api.search.Query.newBuilder()
-                    .setOptions(queryOptions).build("("+Joiner.on(" OR ").join(
-                            (foundReport.getTitle() + " " + foundReport
-                                    .getDescription()).trim().split("\\s+")));
+                    .setOptions(queryOptions).build("(" + QueryHelper.sanitize
+                            (foundReport.getTitle() + " " +
+                                    foundReport.getDescription())
+                            + ") AND distance(location, geopoint(" +
+                            foundReport.getLocation()
+                                    .getLatitude() + "," +
+                            foundReport.getLocation().getLongitude()
+                            + ")) < " +
+                            "26");
 
             IndexSpec indexSpec = IndexSpec.newBuilder().setName
                     (LostReportEndpoint.DOC_INDEX)
@@ -403,9 +410,28 @@ public class FoundReportEndpoint {
 
             Results<ScoredDocument> results = index.search(query);
 
+            ArrayList<Long> ids = new ArrayList<>();
+            Set<String> users = new HashSet<>();
+            for (ScoredDocument doc : results.getResults()) {
+                ids.add(Long.parseLong(doc.getId()));
+                LostReport lostReport = ofy().load().type(LostReport
+                        .class).id(Long.parseLong(doc.getId())).now();
+                if (lostReport != null) {
+                    if (!lostReport.getFound())
+                        users.add(lostReport.getUserId());
+                }
+
+            }
+
+
+            if (!users.isEmpty()) {
+                NotificationHelper.notify(users, "Found" + foundReport
+                        .getId());
+            }
+
             logger.warning(String.format("Found %d results matching found " +
                     "report with id " +
-                    "%s", results.getNumberFound(), id));
+                    "%s: [%s]", results.getNumberFound(), id, ids));
         }
     }
 }

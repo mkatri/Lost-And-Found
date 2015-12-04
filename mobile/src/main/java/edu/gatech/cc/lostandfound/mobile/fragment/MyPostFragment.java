@@ -6,17 +6,26 @@ import android.support.v4.app.Fragment;
 import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ProgressBar;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
+import edu.gatech.cc.lostandfound.api.lostAndFound.model.CollectionResponseFoundReport;
+import edu.gatech.cc.lostandfound.api.lostAndFound.model.CollectionResponseLostReport;
+import edu.gatech.cc.lostandfound.api.lostAndFound.model.FoundReport;
+import edu.gatech.cc.lostandfound.api.lostAndFound.model.LostReport;
 import edu.gatech.cc.lostandfound.mobile.R;
 import edu.gatech.cc.lostandfound.mobile.activity.MainActivity;
 import edu.gatech.cc.lostandfound.mobile.adapter.MyPostRecyclerViewAdapter;
-import edu.gatech.cc.lostandfound.mobile.entity.ReportedObject;
+import edu.gatech.cc.lostandfound.mobile.entity.MyPost;
+import edu.gatech.cc.lostandfound.mobile.network.Api;
 
 
 public class MyPostFragment extends Fragment {
@@ -25,7 +34,7 @@ public class MyPostFragment extends Fragment {
     private ProgressBar mProgressBar;
 
     private MyPostRecyclerViewAdapter rvAdapter;
-    private ArrayList<ReportedObject> alRO = new ArrayList<ReportedObject>();
+    private ArrayList<MyPost> myPosts = new ArrayList<MyPost>();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -42,7 +51,7 @@ public class MyPostFragment extends Fragment {
         mRecyclerView = (RecyclerView) view.findViewById(R.id.recyclerView);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
-        rvAdapter = new MyPostRecyclerViewAdapter(new ArrayList<ReportedObject>(), (MainActivity) getActivity());
+        rvAdapter = new MyPostRecyclerViewAdapter(new ArrayList<MyPost>(), this);
         mRecyclerView.setAdapter(rvAdapter);
 
         mSwipeRefreshLayout = (SwipeRefreshLayout) view.findViewById(R.id.swipe_container);
@@ -61,6 +70,16 @@ public class MyPostFragment extends Fragment {
         mProgressBar.setVisibility(View.VISIBLE);
         return view;
     }
+    public void updateObjects() {
+        new InitializeObjectsTask().execute();
+    }
+    public void setmProgressBar(boolean isVisible) {
+        if(isVisible) {
+            mProgressBar.setVisibility(View.VISIBLE);
+        } else {
+            mProgressBar.setVisibility(View.GONE);
+        }
+    }
 
     private class InitializeObjectsTask extends AsyncTask<Void, Void, Void> {
 
@@ -72,9 +91,59 @@ public class MyPostFragment extends Fragment {
 
         @Override
         protected Void doInBackground(Void... params) {
-            alRO.clear();
+            myPosts.clear();
 
-            //TODO download all my reports
+            try {
+                CollectionResponseFoundReport foundReports = Api.getClient().foundReport().myReports().list()
+                        .execute();
+                CollectionResponseLostReport lostReports = Api.getClient().lostReport().myReports().list()
+                        .execute();
+                List<FoundReport> foundReportList = foundReports.getItems() == null ? new ArrayList<FoundReport>() : foundReports.getItems();
+                List<LostReport> lostReportList = lostReports.getItems() == null ? new ArrayList<LostReport>() : lostReports.getItems();
+                int i = 0, j = 0;
+                while(i < foundReportList.size() && j < lostReportList.size()) {
+                    FoundReport foundReport = foundReportList.get(i);
+                    LostReport lostReport = lostReportList.get(j);
+
+                    if(foundReport.getCreated().getValue() >= lostReport.getCreated().getValue()) {
+                        myPosts.add(new MyPost(foundReport.getId(),
+                                                true,
+                                                foundReport.getTitle(),
+                                                foundReport.getCreated().getValue(),
+                                                foundReport.getReturned()));
+                        i++;
+                    } else {
+                        myPosts.add(new MyPost(lostReport.getId(),
+                                false,
+                                lostReport.getTitle(),
+                                lostReport.getCreated().getValue(),
+                                lostReport.getFound()));
+                        j++;
+                    }
+                }
+                while(i < foundReportList.size()) {
+                    FoundReport foundReport = foundReportList.get(i);
+                    myPosts.add(new MyPost(foundReport.getId(),
+                            true,
+                            foundReport.getTitle(),
+                            foundReport.getCreated().getValue(),
+                            foundReport.getReturned()));
+                    i++;
+                }
+                while(j < lostReportList.size()) {
+                    LostReport lostReport = lostReportList.get(j);
+                    myPosts.add(new MyPost(lostReport.getId(),
+                            false,
+                            lostReport.getTitle(),
+                            lostReport.getCreated().getValue(),
+                            lostReport.getFound()));
+                    j++;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.i("myinfo", e.getLocalizedMessage() + e.getMessage());
+            }
+
             return null;
         }
 
@@ -87,7 +156,7 @@ public class MyPostFragment extends Fragment {
             mProgressBar.setVisibility(View.GONE);
 
             //set data for list
-            rvAdapter.addObjects(alRO);
+            rvAdapter.addObjects(myPosts);
             mSwipeRefreshLayout.setRefreshing(false);
 
         }

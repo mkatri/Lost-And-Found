@@ -6,15 +6,22 @@
         android:name="googlemapmanager.permission.MAPS_RECEIVE"
         android:protectionLevel="signature" />
 
-    <uses-permission android:name="android.permission.GET_ACCOUNTS"/>
-    <uses-permission android:name="android.permission.NETWORK"/>
-    <uses-permission android:name="android.permission.USE_CREDENTIALS"/>
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
+    <uses-permission android:name="android.permission.NETWORK" />
+    <uses-permission android:name="android.permission.USE_CREDENTIALS" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="googlemapmanager.permission.MAPS_RECEIVE" />
     <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <!-- [START gcm_permission] -->
+    <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- [END gcm_permission] -->
+
 
     <uses-feature android:name="android.hardware.camera2" />
     <uses-feature
@@ -23,28 +30,28 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/launcher"
         android:label="@string/app_name"
         android:theme="@style/AppTheme" >
         <activity
-            android:name="edu.gatech.cc.lostandfound.mobile.activity.MainActivity"
+            android:name=".activity.MainActivity"
             android:label="@string/app_name"
             android:screenOrientation="portrait" >
         </activity>
         <activity
-            android:name="edu.gatech.cc.lostandfound.mobile.activity.ReportLostActivity"
+            android:name=".activity.ReportLostActivity"
             android:screenOrientation="portrait" >
         </activity>
         <activity
-            android:name="edu.gatech.cc.lostandfound.mobile.activity.ReportFoundActivity"
+            android:name=".activity.ReportFoundActivity"
             android:screenOrientation="portrait" >
         </activity>
         <activity
-            android:name="edu.gatech.cc.lostandfound.mobile.activity.PinDropActivity"
+            android:name=".activity.PinDropActivity"
             android:screenOrientation="portrait" >
         </activity>
         <activity
-            android:name="edu.gatech.cc.lostandfound.mobile.activity.LoginActivity"
+            android:name=".activity.LoginActivity"
             android:screenOrientation="portrait"
             android:theme="@style/AppTheme.Dark" >
             <intent-filter>
@@ -57,6 +64,51 @@
         <meta-data
             android:name="com.google.android.maps.v2.API_KEY"
             android:value="@string/google_map_key" />
+
+        <activity
+            android:name=".activity.DetailLostActivity"
+            android:label="@string/title_activity_detail_lost"
+            android:screenOrientation="portrait">
+        </activity>
+        <activity
+            android:name=".activity.DetailFoundActivity"
+            android:label="@string/title_activity_detail_found"
+            android:screenOrientation="portrait">
+        </activity>
+        <!-- [START gcm_receiver] -->
+        <receiver
+            android:name="com.google.android.gms.gcm.GcmReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND" >
+            <intent-filter>
+                <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+                <category android:name="gcm.play.android.samples.com.gcmquickstart" />
+            </intent-filter>
+        </receiver>
+        <!-- [END gcm_receiver] -->
+
+        <!-- [START gcm_listener] -->
+        <service
+            android:name="edu.gatech.cc.lostandfound.mobile.notification.MyGcmListenerService"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+            </intent-filter>
+        </service>
+        <!-- [END gcm_listener] -->
+        <!-- [START instanceId_listener] -->
+        <service
+            android:name="edu.gatech.cc.lostandfound.mobile.notification.MyInstanceIDListenerService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.android.gms.iid.InstanceID"/>
+            </intent-filter>
+        </service>
+        <!-- [END instanceId_listener] -->
+        <service
+            android:name="edu.gatech.cc.lostandfound.mobile.notification.RegistrationIntentService"
+            android:exported="false">
+        </service>
     </application>
 
 </manifest>
