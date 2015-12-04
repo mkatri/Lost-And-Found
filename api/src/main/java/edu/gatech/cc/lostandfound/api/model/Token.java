@@ -1,21 +1,26 @@
 package edu.gatech.cc.lostandfound.api.model;
 
+import com.googlecode.objectify.annotation.Entity;
+import com.googlecode.objectify.annotation.Id;
+
 /**
  * Created by mkatri on 12/3/15.
  */
+@Entity
 public class Token {
 
+    @Id
+    Long id;
     String token;
 
-    public Token(String token) {
-        this.token = token;
+    public Token() {
     }
 
-    public String get() {
+    public String getToken() {
         return this.token;
     }
 
-    public void set(String token) {
+    public void setToken(String token) {
         this.token = token;
     }
 }

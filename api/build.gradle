@@ -39,3 +39,6 @@ appengine {
         getDiscoveryDocsOnBuild = true
     }
 }
+dependencies {
+    compile 'com.google.http-client:google-http-client:1.19.0'
+}

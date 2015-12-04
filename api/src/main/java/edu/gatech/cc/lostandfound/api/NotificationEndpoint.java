@@ -6,6 +6,7 @@ import com.google.api.server.spi.config.ApiNamespace;
 import com.google.api.server.spi.response.BadRequestException;
 import com.google.appengine.api.oauth.OAuthRequestException;
 import com.google.appengine.api.users.User;
+import com.googlecode.objectify.ObjectifyService;
 
 import edu.gatech.cc.lostandfound.api.model.LostReport;
 import edu.gatech.cc.lostandfound.api.model.Token;
@@ -18,7 +19,7 @@ import edu.gatech.cc.lostandfound.api.model.Token;
 @Api(
         name = "lostAndFound",
         version = "v1",
-        resource = "notifications",
+        resource = "reports",
         scopes = {Constants.EMAIL_SCOPE},
         clientIds = {Constants.WEB_CLIENT_ID, Constants.ANDROID_CLIENT_ID,
                 com.google.api.server.spi.Constant.API_EXPLORER_CLIENT_ID},
@@ -31,12 +32,18 @@ import edu.gatech.cc.lostandfound.api.model.Token;
 )
 public class NotificationEndpoint {
 
-        @ApiMethod(
-                name = "notification.registerToken",
-                path = "token",
-                httpMethod = ApiMethod.HttpMethod.POST)
-        public void registerToken(Token token, User user) throws
-                OAuthRequestException, BadRequestException {
-                //todo implement
-        }
+    static {
+        // Typically you would register this inside an OfyServive wrapper.
+        // See: https://code.google.com/p/objectify-appengine/wiki/BestPractices
+        ObjectifyService.register(Token.class);
+    }
+
+    @ApiMethod(
+            name = "notification.registerToken",
+            path = "token",
+            httpMethod = ApiMethod.HttpMethod.POST)
+    public void registerToken(Token token, User user) throws
+            OAuthRequestException, BadRequestException {
+        //todo implement
+    }
 }

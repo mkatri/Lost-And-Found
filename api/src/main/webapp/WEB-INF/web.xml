@@ -15,7 +15,8 @@
         <init-param>
             <param-name>services</param-name>
             <param-value>edu.gatech.cc.lostandfound.api.LostReportEndpoint,
-                edu.gatech.cc.lostandfound.api.FoundReportEndpoint</param-value>
+							edu.gatech.cc.lostandfound.api.FoundReportEndpoint,
+						edu.gatech.cc.lostandfound.api.NotificationEndpoint</param-value>
         </init-param>
     </servlet>
     <servlet-mapping>
