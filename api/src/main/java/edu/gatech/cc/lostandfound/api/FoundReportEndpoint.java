@@ -391,7 +391,7 @@ public class FoundReportEndpoint {
 
             com.google.appengine.api.search.Query query = com.google.appengine
                     .api.search.Query.newBuilder()
-                    .setOptions(queryOptions).build(Joiner.on(" OR ").join(
+                    .setOptions(queryOptions).build("("+Joiner.on(" OR ").join(
                             (foundReport.getTitle() + " " + foundReport
                                     .getDescription()).trim().split("\\s+")));
 

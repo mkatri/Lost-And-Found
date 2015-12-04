@@ -168,7 +168,7 @@ public class LostReportEndpoint {
             throw new OAuthRequestException("You need to login to modify " +
                     "reports.");
         }
-        if (id != lostReport.getId()) {
+        if (!id.equals(lostReport.getId())) {
             throw new BadRequestException("Invalid report object.");
         }
         checkOwns(id, user);
