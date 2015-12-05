@@ -436,7 +436,8 @@ public class LostReportEndpoint {
                 FoundReport foundReport = ofy().load().type(FoundReport
                         .class).id(Long.parseLong(doc.getId())).now();
                 if (foundReport != null) {
-                    if (!foundReport.getReturned())
+                    if (!foundReport.getReturned() && !foundReport.getUserId()
+                            .equals(lostReport.getUserId()))
                         users.add(foundReport.getUserId());
                 }
 
